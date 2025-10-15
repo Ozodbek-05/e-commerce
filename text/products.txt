@@ -1,0 +1,178 @@
+=== GET /api/products/ ===
+Class: ProductListAPIView(APIView)
+
+Talablar:
+- get() methodida barcha active productlarni qaytarish
+- Query parameters:
+  * category=1 - category bo'yicha filter
+  * brand=2 - brand bo'yicha filter
+  * min_price=100000 - minimum narx
+  * max_price=500000 - maximum narx
+  * is_featured=true - featured productlar
+  * search=laptop - name va description da qidirish (icontains)
+
+Response har bir product uchun:
+- Nested category: {id, name, slug}
+- Nested brand: {id, name, logo}
+- final_price = price * (1 - discount_percentage/100)
+- in_stock = stock_quantity > 0
+- primary_image = birinchi is_primary=True image URL
+- reviews_count = reviewlar soni
+- average_rating = reviewlar o'rtacha rating
+
+Agar hech qanday product topilmasa:
+return Response({"detail": "Products not found"}, status=404)
+
+
+=== POST /api/products/ ===
+Class: ProductCreateAPIView(APIView)
+
+Request Body:
+{
+    "name": "Laptop HP",
+    "description": "Gaming laptop",
+    "category": 1,
+    "brand": 2,
+    "price": "5000000.00",
+    "discount_percentage": 10,
+    "stock_quantity": 50,
+    "is_featured": true
+}
+
+Talablar:
+- post() methodida yangi product yaratish
+- Manual validation:
+  * name bo'sh bo'lmasligi kerak
+  * price > 0
+  * stock_quantity >= 0
+  * discount_percentage 0-100 orasida
+  * category mavjudligini tekshirish (Category.objects.filter(id=...).exists())
+  * brand mavjudligini tekshirish
+
+Slug avtomatik generate qilish:
+- from django.utils.text import slugify
+- slug = slugify(name)
+- Agar slug mavjud bo'lsa: slug = f"{slug}-{random_number}"
+
+Xatolik bo'lsa:
+return Response({"error": "..."}, status=400)
+
+Muvaffaqiyatli:
+return Response(product_data, status=201)
+
+
+=== GET /api/products/{id}/ ===
+Class: ProductDetailAPIView(APIView)
+
+Response:
+{
+    "id": 1,
+    "name": "Laptop HP",
+    "slug": "laptop-hp",
+    "description": "Gaming laptop",
+    "category": {
+        "id": 1,
+        "name": "Electronics",
+        "slug": "electronics",
+        "parent": null
+    },
+    "brand": {
+        "id": 2,
+        "name": "HP",
+        "logo": "https://...",
+        "website": "https://hp.com"
+    },
+    "price": "5000000.00",
+    "discount_percentage": 10,
+    "final_price": "4500000.00",
+    "stock_quantity": 50,
+    "in_stock": true,
+    "is_featured": true,
+    "images": [
+        {
+            "id": 1,
+            "image_url": "https://...",
+            "is_primary": true,
+            "order": 0
+        }
+    ],
+    "reviews": [
+        {
+            "id": 1,
+            "user": {"id": 1, "username": "ali"},
+            "rating": 5,
+            "title": "Zo'r laptop",
+            "comment": "Juda yaxshi...",
+            "is_verified_purchase": true,
+            "created_at": "2024-10-01T10:00:00Z"
+        }
+    ],
+    "reviews_count": 15,
+    "average_rating": 4.5,
+    "related_products": [
+        {
+            "id": 2,
+            "name": "Laptop Dell",
+            "price": "4500000.00",
+            "final_price": "4050000.00",
+            "primary_image": "https://..."
+        }
+    ],
+    "created_at": "2024-10-01T10:00:00Z",
+    "updated_at": "2024-10-10T10:00:00Z"
+}
+
+Talablar:
+- get() method, pk URL dan
+- Product.objects.get(pk=pk) - try/except
+- 404 agar product topilmasa yoki is_active=False
+- To'liq nested data
+- related_products: bir xil category dan 4 ta (exclude current product)
+- Serializer ishlatmaslik
+
+
+=== PUT /api/products/{id}/ ===
+Class: ProductUpdateAPIView(APIView)
+
+Request Body:
+{
+    "name": "Updated Laptop HP",
+    "price": "4800000.00",
+    "stock_quantity": 45,
+    "discount_percentage": 15
+}
+
+Talablar:
+- put() method - to'liq update
+- Barcha fieldlar validatsiya
+- Slug qayta generate qilish agar name o'zgarsa
+- 404 agar product yo'q
+- 400 agar validation xato
+- 200 bilan yangilangan ma'lumot qaytarish
+
+
+=== PATCH /api/products/{id}/ ===
+Class: ProductUpdateAPIView(APIView)
+
+Request Body:
+{
+    "stock_quantity": 30,
+    "discount_percentage": 20
+}
+
+Talablar:
+- patch() method - qisman update
+- Faqat yuborilgan fieldlarni yangilash
+- Har bir fieldni alohida validate qilish
+- 200 bilan yangilangan ma'lumot qaytarish
+
+
+=== DELETE /api/products/{id}/ ===
+Class: ProductDeleteAPIView(APIView)
+
+Talablar:
+- delete() method
+- Product ni o'chirish (yoki is_active=False qilish)
+- 404 agar product yo'q
+- 204 No Content qaytarish
+- Response body: {"message": "Product deleted successfully"}

@@ -1,0 +1,216 @@
+=== GET /api/cart/ ===
+Class: CartRetrieveAPIView(GenericAPIView, RetrieveModelMixin)
+
+Response:
+{
+    "id": 1,
+    "user": {
+        "id": 1,
+        "username": "ali"
+    },
+    "items": [
+        {
+            "id": 1,
+            "product": {
+                "id": 1,
+                "name": "Laptop HP",
+                "price": "5000000.00",
+                "discount_percentage": 10,
+                "final_price": "4500000.00",
+                "primary_image": "https://...",
+                "in_stock": true
+            },
+            "quantity": 2,
+            "subtotal": "9000000.00",
+            "added_at": "2024-10-01T10:00:00Z"
+        }
+    ],
+    "items_count": 2,
+    "total_amount": "9000000.00",
+    "created_at": "2024-09-01T10:00:00Z",
+    "updated_at": "2024-10-10T10:00:00Z"
+}
+
+Talablar:
+- get_object() override: request.user.cart
+- Agar cart yo'q bo'lsa avtomatik yaratish: Cart.objects.get_or_create(user=request.user)
+- get() method: return self.retrieve(request)
+- Serializer yaratish:
+  * CartItemSerializer - nested product
+  * product ichida final_price, in_stock, primary_image (SerializerMethodField)
+  * subtotal = quantity * product.final_price (SerializerMethodField)
+  * CartSerializer - nested items
+  * items_count, total_amount (SerializerMethodField)
+
+
+=== POST /api/cart/items/ ===
+Class: CartItemCreateAPIView(GenericAPIView, CreateModelMixin)
+
+Request Body:
+{
+    "product": 1,
+    "quantity": 2
+}
+
+Talablar:
+- post() method: return self.create(request)
+- perform_create() override:
+  * cart = request.user.cart
+  * product mavjudligini tekshirish
+  * Agar product allaqachon cart da bo'lsa, quantity ni oshirish
+  * Agar yangi bo'lsa, yangi CartItem yaratish
+  * Stock tekshirish: quantity <= product.stock_quantity
+- Serializer:
+  * CartItemCreateSerializer
+  * validate_quantity(): quantity > 0
+  * validate_product(): product.is_active va in_stock
+  * validate(): stock_quantity tekshirish
+- 201 yoki 200 status code
+- Response: yangilangan cart ma'lumoti
+
+
+=== PATCH /api/cart/items/{id}/ ===
+Class: CartItemUpdateAPIView(GenericAPIView, UpdateModelMixin)
+
+Request Body:
+{
+    "quantity": 3
+}
+
+Talablar:
+- patch() method: return self.partial_update(request, *args, **kwargs)
+- get_queryset(): request.user.cart.items.all()
+- Serializer:
+  * quantity validation
+  * stock tekshirish
+- Agar quantity = 0, CartItem ni o'chirish
+- Response: yangilangan cart item
+
+
+=== DELETE /api/cart/items/{id}/ ===
+Class: CartItemDeleteAPIView(GenericAPIView, DestroyModelMixin)
+
+Talablar:
+- delete() method: return self.destroy(request, *args, **kwargs)
+- get_queryset(): request.user.cart.items.all()
+- 204 No Content
+
+
+=== POST /api/orders/checkout/ ===
+Class: OrderCreateAPIView(GenericAPIView, CreateModelMixin)
+
+Request Body:
+{
+    "shipping_address": "Toshkent, Yunusobod 12",
+    "phone": "+998901234567",
+    "notes": "Tezroq yetkazib bering"
+}
+
+Talablar:
+- post() method: return self.create(request)
+- perform_create() override:
+  * Cart ni tekshirish (bo'sh bo'lmasligi kerak)
+  * Har bir cart item uchun stock tekshirish
+  * Order yaratish:
+    - order_number generate: f"ORD-{user.id}-{timestamp}"
+    - total_amount hisoblash
+    - status = 'pending'
+  * OrderItem lar yaratish (cart items dan)
+  * Product stock_quantity ni kamaytirish
+  * Cart ni tozalash
+- Serializer:
+  * OrderCreateSerializer
+  * validate_phone(): to'g'ri format
+  * validate_shipping_address(): kamida 10 ta belgi
+- 201 status
+- Response: to'liq order ma'lumoti (nested items)
+
+
+=== GET /api/orders/ ===
+Class: OrderListAPIView(GenericAPIView, ListModelMixin)
+
+Response:
+{
+    "count": 10,
+    "next": null,
+    "previous": null,
+    "results": [
+        {
+            "id": 1,
+            "order_number": "ORD-1-1696147200",
+            "total_amount": "9000000.00",
+            "status": "processing",
+            "status_display": "Processing",
+            "items_count": 2,
+            "created_at": "2024-10-01T10:00:00Z",
+            "can_cancel": true
+        }
+    ]
+}
+
+Talablar:
+- get() method: return self.list(request)
+- get_queryset(): request.user.orders.all().order_by('-created_at')
+- Pagination: PageNumberPagination (page_size=10)
+- Serializer:
+  * OrderListSerializer
+  * items_count (SerializerMethodField)
+  * can_cancel: status in ['pending', 'processing'] (SerializerMethodField)
+  * status_display: get_status_display()
+
+
+=== GET /api/orders/{id}/ ===
+Class: OrderDetailAPIView(GenericAPIView, RetrieveModelMixin)
+
+Response:
+{
+    "id": 1,
+    "order_number": "ORD-1-1696147200",
+    "user": {
+        "id": 1,
+        "username": "ali",
+        "email": "ali@gmail.com"
+    },
+    "items": [
+        {
+            "id": 1,
+            "product": {
+                "id": 1,
+                "name": "Laptop HP",
+                "primary_image": "https://..."
+            },
+            "quantity": 2,
+            "price": "5000000.00",
+            "discount_percentage": 10,
+            "subtotal": "9000000.00"
+        }
+    ],
+    "total_amount": "9000000.00",
+    "status": "processing",
+    "shipping_address": "Toshkent, Yunusobod 12",
+    "phone": "+998901234567",
+    "notes": "Tezroq yetkazib bering",
+    "created_at": "2024-10-01T10:00:00Z",
+    "updated_at": "2024-10-02T10:00:00Z"
+}
+
+Talablar:
+- get() method: return self.retrieve(request, *args, **kwargs)
+- get_queryset(): request.user.orders.all()
+- Serializer:
+  * OrderDetailSerializer - to'liq nested
+  * OrderItemSerializer ichida subtotal (SerializerMethodField)
+
+
+=== POST /api/orders/{id}/cancel/ ===
+Class: OrderCancelAPIView(GenericAPIView)
+
+Talablar:
+- post() method
+- get_object(): order = request.user.orders.get(pk=pk)
+- Validation:
+  * Order status 'pending' yoki 'processing' bo'lishi kerak
+  * Aks holda: {"error": "Order cannot be cancelled"}
+- Order status ni 'cancelled' ga o'zgartirish
+- Product stock_quantity ni qaytarish (har bir OrderItem uchun)
+- Response: {"message": "Order cancelled successfully", "order": {...}}

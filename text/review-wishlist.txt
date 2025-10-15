@@ -1,0 +1,198 @@
+=== POST /api/products/{product_id}/reviews/ ===
+Class: ProductReviewCreateView(CreateAPIView)
+
+Request Body:
+{
+    "rating": 5,
+    "title": "Zo'r mahsulot",
+    "comment": "Juda yaxshi laptop, tavsiya qilaman!"
+}
+
+Talablar:
+- queryset = ProductReview.objects.all()
+- serializer_class = ProductReviewSerializer
+- permission_classes = [IsAuthenticated]
+- perform_create() override:
+  * product = Product.objects.get(pk=product_id)
+  * user = request.user
+  * Tekshirish: user bu product ga review yozgan bo'lmasligi kerak
+  * is_verified_purchase: user bu productni sotib olgan bo'lsa True
+    (OrderItem.objects.filter(order__user=user, product=product, order__status='delivered').exists())
+  * serializer.save(user=user, product=product, is_verified_purchase=...)
+- Serializer:
+  * validate_rating(): 1-5 orasida
+  * validate_comment(): kamida 10 ta belgi
+  * validate_title(): kamida 5 ta belgi
+- 201 status
+
+
+=== GET /api/products/{product_id}/reviews/ ===
+Class: ProductReviewListView(ListAPIView)
+
+Response:
+{
+    "count": 25,
+    "next": "...",
+    "previous": null,
+    "results": [
+        {
+            "id": 1,
+            "user": {
+                "id": 1,
+                "username": "ali",
+                "full_name": "Ali Valiyev"
+            },
+            "rating": 5,
+            "title": "Zo'r mahsulot",
+            "comment": "Juda yaxshi laptop...",
+            "is_verified_purchase": true,
+            "created_at": "2024-10-01T10:00:00Z",
+            "helpful_count": 15
+        }
+    ]
+}
+
+Talablar:
+- queryset = ProductReview.objects.filter(product_id=product_id).order_by('-created_at')
+- serializer_class = ProductReviewListSerializer
+- pagination_class = PageNumberPagination
+- Filter va ordering:
+  * ?rating=5 - rating bo'yicha filter
+  * ?ordering=-created_at yoki ?ordering=-rating
+- Serializer:
+  * helpful_count - SerializerMethodField (hozircha 0 qaytarish, keyinchalik implement qilish uchun)
+
+
+=== PUT /api/reviews/{id}/ ===
+Class: ProductReviewUpdateView(UpdateAPIView)
+
+Request Body:
+{
+    "rating": 4,
+    "title": "Yaxshi mahsulot",
+    "comment": "Yangilangan fikr..."
+}
+
+Talablar:
+- queryset = ProductReview.objects.all()
+- serializer_class = ProductReviewSerializer
+- permission_classes = [IsAuthenticated]
+- get_queryset() override: faqat o'z reviewlarini o'zgartira oladi
+  return ProductReview.objects.filter(user=self.request.user)
+- 404 agar review topilmasa yoki boshqa userniki bo'lsa
+
+
+=== DELETE /api/reviews/{id}/ ===
+Class: ProductReviewDeleteView(DestroyAPIView)
+
+Talablar:
+- queryset = ProductReview.objects.all()
+- permission_classes = [IsAuthenticated]
+- get_queryset() override: faqat o'z reviewlarini o'chira oladi
+- 204 No Content
+
+
+=== GET /api/wishlist/ ===
+Class: WishlistRetrieveView(RetrieveAPIView)
+
+Response:
+{
+    "id": 1,
+    "user": {
+        "id": 1,
+        "username": "ali"
+    },
+    "products": [
+        {
+            "id": 1,
+            "name": "Laptop HP",
+            "slug": "laptop-hp",
+            "price": "5000000.00",
+            "discount_percentage": 10,
+            "final_price": "4500000.00",
+            "primary_image": "https://...",
+            "in_stock": true,
+            "average_rating": 4.5,
+            "added_to_wishlist_at": "2024-10-01T10:00:00Z"
+        }
+    ],
+    "products_count": 5,
+    "created_at": "2024-09-01T10:00:00Z"
+}
+
+Talablar:
+- queryset = Wishlist.objects.all()
+- serializer_class = WishlistSerializer
+- permission_classes = [IsAuthenticated]
+- get_object() override:
+  * wishlist, created = Wishlist.objects.get_or_create(user=self.request.user)
+  * return wishlist
+- Serializer:
+  * Nested products with full details
+  * products_count (SerializerMethodField)
+  * added_to_wishlist_at - bu field yo'q, lekin hozircha created_at ishlatish
+
+
+=== POST /api/wishlist/add/{product_id}/ ===
+Class: WishlistAddProductView(GenericAPIView)
+
+Talablar:
+- permission_classes = [IsAuthenticated]
+- post() method:
+  * product = Product.objects.get(pk=product_id, is_active=True)
+  * wishlist, created = Wishlist.objects.get_or_create(user=request.user)
+  * Agar product allaqachon wishlist da bo'lsa:
+    return Response({"message": "Product already in wishlist"}, status=200)
+  * Aks holda qo'shish:
+    wishlist.products.add(product)
+    return Response({"message": "Product added to wishlist"}, status=201)
+- 404 agar product topilmasa
+
+
+=== DELETE /api/wishlist/remove/{product_id}/ ===
+Class: WishlistRemoveProductView(GenericAPIView)
+
+Talablar:
+- permission_classes = [IsAuthenticated]
+- delete() method:
+  * wishlist = request.user.wishlist
+  * product = Product.objects.get(pk=product_id)
+  * wishlist.products.remove(product)
+  * return Response({"message": "Product removed from wishlist"}, status=200)
+- 404 agar product yoki wishlist topilmasa
+
+
+=== POST /api/wishlist/move-to-cart/{product_id}/ ===
+Class: WishlistMoveToCartView(GenericAPIView)
+
+Talablar:
+- permission_classes = [IsAuthenticated]
+- post() method:
+  * product = Product.objects.get(pk=product_id)
+  * wishlist = request.user.wishlist
+  * cart, created = Cart.objects.get_or_create(user=request.user)
+
+  * Validation:
+    - product wishlist da bo'lishi kerak
+    - product in_stock bo'lishi kerak
+
+  * Wishlist dan o'chirish: wishlist.products.remove(product)
+  * Cart ga qo'shish:
+    - Agar cart da mavjud bo'lsa quantity+1
+    - Aks holda yangi CartItem yaratish (quantity=1)
+
+  * Response: {
+      "message": "Product moved to cart",
+      "cart_items_count": cart.items.count()
+    }
+
+
+=== DELETE /api/wishlist/clear/ ===
+Class: WishlistClearView(GenericAPIView)
+
+Talablar:
+- permission_classes = [IsAuthenticated]
+- delete() method:
+  * wishlist = request.user.wishlist
+  * wishlist.products.clear()
+  * return Response({"message": "Wishlist cleared"}, status=200)
