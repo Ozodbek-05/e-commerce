@@ -70,3 +70,84 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ProductUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['name', 'price', 'stock_quantity', 'discount_percentage']
+
+    @staticmethod
+    def validate_name(value):
+        if not value:
+            raise serializers.ValidationError("Name must not be empty")
+        return value
+
+    @staticmethod
+    def validate_price(value):
+        if value < 0:
+            raise serializers.ValidationError("Price must be greater than 0")
+        return value
+
+    @staticmethod
+    def validate_stock_quantity(value):
+        if value < 0:
+            raise serializers.ValidationError("Stock quantity must be >= 0")
+        return value
+
+    @staticmethod
+    def validate_discount_percentage(value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Discount percentage must be between 0 and 100")
+        return value
+
+
+    def update(self, instance, validated_data):
+        if 'name' in validated_data:
+            slug_base = slugify(validated_data['name'])
+            slug = slug_base
+            while Product.objects.filter(slug=slug).exclude(id=instance.id).exists():
+                slug = f"{slug_base}-{generate_id()}"
+            instance.slug = slug
+
+        return super().update(instance, validated_data)
+
+
+
+class ProductPartialUpdateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Product
+        fields = ['name', 'price', 'stock_quantity', 'discount_percentage']
+
+    @staticmethod
+    def validate_name(value):
+        if not value:
+            raise serializers.ValidationError("Name must not be empty")
+        return value
+
+    @staticmethod
+    def validate_price(value):
+        if value < 0:
+            raise serializers.ValidationError("Price must be greater than 0")
+        return value
+
+    @staticmethod
+    def validate_stock_quantity(value):
+        if value < 0:
+            raise serializers.ValidationError("Stock quantity must be >= 0")
+        return value
+
+    @staticmethod
+    def validate_discount_percentage(value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Discount percentage must be between 0 and 100")
+        return value
+
+    def update(self, instance, validated_data):
+        if 'name' in validated_data:
+            slug_base = slugify(validated_data['name'])
+            slug = slug_base
+            while Product.objects.filter(slug=slug).exclude(id=instance.id).exists():
+                slug = f"{slug_base}-{generate_id()}"
+            instance.slug = slug
+        return super().update(instance, validated_data)
+
